@@ -1,0 +1,77 @@
+#this only works if you are a Power BI Admin
+
+
+#install PBI MGMT Powershell Module if not already installed
+if (Get-Module -ListAvailable -Name MicrosoftPowerBIMgmt) {
+    Write-Host "PBI MGMT Already Installed"
+} 
+else {
+    try { Install-Module -Name MicrosoftPowerBIMgmt -AllowClobber -Confirm:$False -Force }
+    catch [Exception] {
+        $_.message 
+        exit
+    }
+}
+
+
+#create your backup folder if it doesn't already exist, empty it otherwise
+$Path = "Your path here"
+$folderName = "Backups"
+$backupFolder = $Path + "\" + $folderName
+$2ndfolderName = "Backups2"
+$2ndbackupFolder = $Path + "\" + $2ndfolderName
+
+
+#see if they already exist
+$backupFolderexists = Test-Path $backupFolder
+$2ndbackupFolderexists = Test-Path $2ndbackupFolder
+
+if ($backupFolderexists -And $2ndbackupFolderexists) {
+    write-host "Folders already exists" 
+    #empty the 2nd backup folder
+    Remove-Item $2ndbackupFolder\*
+
+    #move contents from 1st backup folder to second
+    Move-Item -Path $backupFolder\* -Destination $2ndbackupFolder
+}
+else {
+    #create backup 1
+    try { New-Item -itemType Directory -Path $Path -Name $folderName }
+    catch [Exception] {
+        $_.message 
+        exit
+    }
+    #create backup2
+    try { New-Item -itemType Directory -Path $Path -Name $2ndfolderName }
+    catch [Exception] {
+        $_.message 
+        exit
+    }
+}
+
+
+##log in to Power BI
+Disconnect-PowerBIServiceAccount
+Login-PowerBIServiceAccount 
+
+
+#Get all available workspaces IDs in a dictionary
+$WorkSpaceList = Get-PowerBIWorkspace
+
+
+#loop through the workspaces
+ForEach ($workspace in $WorkSpaceList) {
+    #get a list of the reports in the workspace
+    $ReportsInWorkspace = Get-PowerBIReport -WorkspaceId $workspace.Id
+
+    #loop through the lists of reports and export backups to a file
+    ForEach ($Report in $ReportsInWorkspace) {
+        $ReportName = $Report.Name + ".pbix"
+        $ReportFullPath = $backupFolder + "\" + $ReportName
+        Export-PowerBIReport -WorkspaceId $workspace.Id -Id $Report.Id -Outfile $ReportFullPath
+    }
+}
+
+
+#log out from PBI
+Disconnect-PowerBIServiceAccount
