@@ -1,0 +1,48 @@
+#you must be a Power BI Admin for this to work
+
+
+#install PBI MGMT Powershell Module if not already installed
+if (Get-Module -ListAvailable -Name MicrosoftPowerBIMgmt) {
+    Write-Host "PBI MGMT Already Installed"
+} 
+else {
+    try { Install-Module -Name MicrosoftPowerBIMgmt -AllowClobber -Confirm:$False -Force }
+    catch [Exception] {
+        $_.message 
+        exit
+    }
+}
+
+
+#(re)Connect to the Power BI service
+Disconnect-PowerBIServiceAccount
+Login-PowerBIServiceAccount 
+
+
+#Get all available workspaces IDs in a dictionary
+$WorkSpaceList = Get-PowerBIWorkspace -Scope Organization -Type Workspace
+
+#loop through the workspaces and add the corresponding Security Group
+ForEach ($workspace in $WorkSpaceList) {
+
+    $Url = "/groups/" + $workspace.Id + "/users"
+    
+    $Body = @{
+                identifier=  #Object ID 
+                groupUserAccessRight= “Admin” #Permission Type(Admin, Member, Contributor, Viewer) 
+                principalType= “Group” #The type of Principal(App, Group, User)
+                }
+
+    $BodyJSON=$Body | ConvertTo-Json
+
+    try{
+    Invoke-PowerBIRestMethod -Method post -Url $Url -Body $BodyJSON #Workspace ID
+    }
+    catch{
+    Write-Host "Did not work for " + $workspace.name
+    }
+}
+
+
+#log out of PBI
+Disconnect-PowerBIServiceAccount
