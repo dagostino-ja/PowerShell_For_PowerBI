@@ -1,0 +1,49 @@
+#you must be an admin for this to work
+
+#install PBI MGMT Powershell Module if not already installed
+if (Get-Module -ListAvailable -Name MicrosoftPowerBIMgmt) {
+    Write-Host "PBI MGMT Already Installed"
+} 
+else {
+    try { Install-Module -Name MicrosoftPowerBIMgmt -AllowClobber -Confirm:$False -Force }
+    catch [Exception] {
+        $_.message 
+        exit
+    }
+}
+
+
+#Connect to the Power BI service
+Disconnect-PowerBIServiceAccount
+Login-PowerBIServiceAccount
+
+
+#Get all available workspaces IDs in a dictionary
+$RefreshScheduleArray =  @()
+$WorkSpaceList = Get-PowerBIWorkspace -Scope Organization -Type Workspace
+
+
+#loop through the workspaces
+ForEach ($workspace in $WorkSpaceList) {
+    #get a list of the reports in the workspace
+    $DatasetsInWorkspace = Get-PowerBIDataset -Scope Organization -WorkspaceId $workspace.Id 
+    if ($DatasetsInWorkspace.length -gt 0)
+    {
+        #loop through the lists of reports and export backups to a file
+        ForEach ($Dataset in $DatasetsInWorkspace) {
+            $GetDatasetRefreshHistory = $PbiRestApi + "groups/" + $workspace.Id + "/datasets/" + $Dataset.id + "/refreshschedule?$expand=configuredby"
+            $jsonblock = Invoke-PowerBIRestMethod -Method GET -Url $GetDatasetRefreshHistory | ConvertFrom-Json
+            $jsonblock | Add-Member -Type NoteProperty -Name "Dataset Name" -Value $Dataset.Name
+            $jsonblock | Add-Member -Type NoteProperty -Name "Dataset Id" -Value $Dataset.id
+            $jsonblock | Add-Member -Type NoteProperty -Name "configuredBy" -Value $Dataset.ConfiguredBy
+            #$jsonblock = $jsonblock  ConvertTo-Json
+            $RefreshScheduleArray += $jsonblock
+        }
+    }
+}
+
+$RefreshScheduleArray | ConvertTo-Json -Depth 20 | out-File "Your File Here"
+
+
+#log out from PBI
+Disconnect-PowerBIServiceAccount
